@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"sync"
 )
 
 type APIServer struct {
@@ -14,21 +15,16 @@ type APIServer struct {
 	stream     Stream
 }
 
-func NewAPIServer(listerAddr string, store Storage, stream Stream) *APIServer {
+func NewAPIServer(listerAddr string, store Storage) *APIServer {
 	return &APIServer{
 		listenAddr: listerAddr,
 		store:      store,
-		stream:     stream,
 	}
 }
 
 func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		return s.handleGetAccount(w, r)
-	}
-	if r.Method == "POST" {
-		return s.handleCreateUser(w, r)
-
 	}
 	if r.Method == "DELETE" {
 		return s.handleDeleteSegment(w, r)
@@ -46,31 +42,42 @@ func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) err
 	return WriteJSON(w, http.StatusOK, user)
 }
 
-func (s *APIServer) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
-	createUserReq := new(User)
-	if err := json.NewDecoder(r.Body).Decode(createUserReq); err != nil {
-		return err
+func (s *APIServer) handleCreateUser(wg *sync.WaitGroup, notifyChannel chan []byte) error {
+	defer wg.Done()
+
+	for {
+		// Read from the notifyChannel
+		data, ok := <-notifyChannel
+		if !ok {
+			// Channel closed, exiting the loop
+			return nil
+		}
+
+		createUserReq := new(User)
+		if err := json.Unmarshal(data, createUserReq); err != nil {
+			return err
+		}
+		user, _ := NewUser(
+			createUserReq.OrderUid,
+			createUserReq.TrackNumber,
+			createUserReq.Entry,
+			createUserReq.Delivery,
+			createUserReq.Payment,
+			createUserReq.Items,
+			createUserReq.Locale,
+			createUserReq.InternalSignature,
+			createUserReq.CustomerID,
+			createUserReq.DeliveryService,
+			createUserReq.Shardkey,
+			createUserReq.SmID,
+			createUserReq.DateCreated,
+			createUserReq.OofShard,
+		)
+		if err := s.store.CreateUser(user); err != nil {
+			return err
+		}
 	}
-	user, _ := NewUser(
-		createUserReq.OrderUid,
-		createUserReq.TrackNumber,
-		createUserReq.Entry,
-		createUserReq.Delivery,
-		createUserReq.Payment,
-		createUserReq.Items,
-		createUserReq.Locale,
-		createUserReq.InternalSignature,
-		createUserReq.CustomerID,
-		createUserReq.DeliveryService,
-		createUserReq.Shardkey,
-		createUserReq.SmID,
-		createUserReq.DateCreated,
-		createUserReq.OofShard,
-	)
-	if err := s.store.CreateUser(user); err != nil {
-		return err
-	}
-	return WriteJSON(w, http.StatusOK, user)
+
 }
 
 func (s *APIServer) handleDeleteSegment(w http.ResponseWriter, r *http.Request) error {
@@ -103,18 +110,11 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 
 func (s *APIServer) Run() {
 
-	go func() {
-		err := s.stream.subscribe()
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Println()
-	}()
-
 	router := mux.NewRouter()
-	router.HandleFunc("/user", makeHTTPHandleFunc(s.handleCreateUser))
+
 	router.HandleFunc("/user/{id}", makeHTTPHandleFunc(s.handleGetAccount))
 	router.HandleFunc("/user/{slug}", makeHTTPHandleFunc(s.handleDeleteSegment))
+
 	http.ListenAndServe(s.listenAddr, router)
 
 	log.Panicln("API server running on port", s.listenAddr)

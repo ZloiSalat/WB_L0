@@ -10,14 +10,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	stream, err := NewNatsConnection()
+
+	server := NewAPIServer(":3000", store)
+	stream, err := NewNatsConnection(store, server)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	server := NewAPIServer(":3000", store, stream)
+	if err := stream.Subscribe(); err != nil {
+		log.Fatal(err)
+	}
 
 	server.Run()
 
-	close(exitSignal)
 }
