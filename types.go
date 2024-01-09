@@ -4,6 +4,11 @@ import (
 	"time"
 )
 
+type UserJSON struct {
+	OrderUID string
+	Data     []byte
+}
+
 type User struct {
 	OrderUid          string    `json:"order_uid"`
 	TrackNumber       string    `json:"track_number"`
