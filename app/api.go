@@ -1,8 +1,9 @@
-package main
+package app
 
 import (
-	cache2 "WB/cache"
-	"WB/storage"
+	"WB/cache"
+	"WB/store"
+	"WB/types"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -12,15 +13,15 @@ import (
 
 type APIServer struct {
 	listenAddr string
-	store      storage.Storage
-	stream     Stream
-	cache      cache2.Cache
+	store      store.Store
+	cache      cache.Cache
 }
 
-func NewAPIServer(listerAddr string, store storage.Storage) *APIServer {
+func NewAPIServer(listerAddr string, store store.Store, cache cache.Cache) *APIServer {
 	return &APIServer{
 		listenAddr: listerAddr,
 		store:      store,
+		cache:      cache,
 	}
 }
 
@@ -28,29 +29,26 @@ func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error 
 	if r.Method == "GET" {
 		return s.handleGetAccount(w, r)
 	}
-	if r.Method == "DELETE" {
-		return s.handleDeleteSegment(w, r)
-	}
+
 	return fmt.Errorf("method now allowed %s", r.Method)
 
 }
 
 func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
+	var user types.User
+
 	uid := mux.Vars(r)["id"]
-	user, err := s.cache.Order().Find(uid)
+	order, err := s.cache.Order().Find(uid)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(order.Data, &user)
 	if err != nil {
 		return err
 	}
 
 	return WriteJSON(w, http.StatusOK, user)
-}
-
-func (s *APIServer) handleDeleteSegment(w http.ResponseWriter, r *http.Request) error {
-	segment := mux.Vars(r)["slug"]
-	if err := s.store.DeleteSegment(segment); err != nil {
-		return err
-	}
-	return WriteJSON(w, http.StatusOK, "segment deleted sucsessfully")
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
@@ -65,7 +63,6 @@ func (s *APIServer) Run() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/user/{id}", makeHTTPHandleFunc(s.handleGetAccount))
-	router.HandleFunc("/user/{slug}", makeHTTPHandleFunc(s.handleDeleteSegment))
 	http.ListenAndServe(s.listenAddr, router)
 
 	log.Panicln("API server running on port", s.listenAddr)

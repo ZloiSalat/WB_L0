@@ -1,27 +1,24 @@
-package main
+package nats
 
 import (
-	cache2 "WB/cache"
-	"WB/storage"
+	"WB/cache"
+	"WB/cache/mapcache"
+	"WB/store"
+	"WB/types"
 	"encoding/json"
 	"github.com/go-playground/validator/v10"
 	"github.com/nats-io/stan.go"
 	"log"
 )
 
-type Stream interface {
-	Subscribe() error
-	stopSubscription()
-}
-
 type NatsStreaming struct {
 	ns        stan.Conn
-	store     storage.Storage
+	store     store.Store
 	validator *validator.Validate
-	cache     cache2.Cache
+	cache     cache.Cache
 }
 
-func NewNatsConnection(store storage.Storage, cache cache2.Cache) (*NatsStreaming, error) {
+func NewNatsConnection(store store.Store, cache cache.Cache) (*NatsStreaming, error) {
 	clientID := "your-client-id--"
 	clusterID := "my-cluster"
 	natsURL := "nats://localhost:4222" // Update with your NATS Streaming server URL
@@ -45,18 +42,16 @@ func NewNatsConnection(store storage.Storage, cache cache2.Cache) (*NatsStreamin
 func (sc *NatsStreaming) Subscribe() error {
 	subject := "your-subject"
 	_, err := sc.ns.Subscribe(subject, func(msg *stan.Msg) {
-		log.Printf("Message from stream %s", msg.Data)
+		//log.Printf("Message from stream %s", msg.Data)
 		if err := msg.Ack(); err != nil {
 			log.Println(err)
 			return
 		}
-		var u User
+		var u types.User
 		if err := json.Unmarshal(msg.Data, &u); err != nil {
 			log.Println(err)
 			return
 		}
-
-		log.Println(u)
 
 		if err := sc.validator.Struct(u); err != nil {
 			log.Println(err)
@@ -69,7 +64,7 @@ func (sc *NatsStreaming) Subscribe() error {
 			return
 		}
 
-		userCache := UserJSON{
+		userCache := types.OrderJSON{
 			OrderUID: u.OrderUid,
 			Data:     data,
 		}
@@ -83,8 +78,7 @@ func (sc *NatsStreaming) Subscribe() error {
 
 		if err := sc.cache.Order().Create(&userCache); err != nil {
 			log.Println(err)
-			sc.cache, err = cache2.New(sc.store)
-
+			sc.cache, err = mapcache.New(sc.store)
 			log.Printf("order with order_uid=%s stored to cache\n", userCache.OrderUID)
 		}
 

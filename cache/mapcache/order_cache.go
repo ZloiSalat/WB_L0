@@ -1,20 +1,21 @@
-package cache
+package mapcache
 
 import (
-	"WB"
-	"WB/storage"
+	"WB/store"
+	"WB/types"
 	"errors"
+	"log"
 )
 
 // OrderCache ...
 type OrderCache struct {
-	orders map[string]*main.UserJSON
+	orders map[string]*types.OrderJSON
 	cache  *Cache
 }
 
 // NewOrderCache ...
-func NewOrderCache(store storage.Storage) (*OrderCache, error) {
-	orders, err := store.FindAll()
+func NewOrderCache(store store.Store) (*OrderCache, error) {
+	orders, err := store.Order().FindAll()
 	if err != nil {
 		return nil, err
 	}
@@ -23,14 +24,16 @@ func NewOrderCache(store storage.Storage) (*OrderCache, error) {
 		orders: orders,
 	}
 
+	log.Println("Initialized OrderCache with orders:", orders)
+
 	return c, nil
 }
 
-func (c *OrderCache) Load(orders map[string]*main.UserJSON) {
+func (c *OrderCache) Load(orders map[string]*types.OrderJSON) {
 	c.orders = orders
 }
 
-func (c *OrderCache) Create(order *main.UserJSON) error {
+func (c *OrderCache) Create(order *types.OrderJSON) error {
 	if _, ok := c.orders[order.OrderUID]; ok == true {
 		return errors.New("already exists")
 	}
@@ -39,7 +42,7 @@ func (c *OrderCache) Create(order *main.UserJSON) error {
 	return nil
 }
 
-func (c *OrderCache) Find(orderUID string) (*main.UserJSON, error) {
+func (c *OrderCache) Find(orderUID string) (*types.OrderJSON, error) {
 	if order, ok := c.orders[orderUID]; ok == true {
 		return order, nil
 	}

@@ -1,38 +1,15 @@
 package cache
 
-import (
-	"WB"
-	"WB/storage"
-)
+import "WB/types"
 
-type Cache struct {
-	orderCache *OrderCache
+// Cache ...
+type Cache interface {
+	Order() OrderCache
 }
 
-// New ...
-func New(store storage.Storage) (*Cache, error) {
-	orderCache, err := NewOrderCache(store)
-	if err != nil {
-		return nil, err
-	}
-
-	c := &Cache{
-		orderCache: orderCache,
-	}
-
-	return c, nil
-}
-
-// Order ...
-func (c *Cache) Order() OrderCache {
-	if c.orderCache != nil {
-		return c.orderCache
-	}
-
-	c.orderCache = &OrderCache{
-		cache:  c,
-		orders: make(map[string]*main.UserJSON),
-	}
-
-	return c.orderCache
+// OrderCache ...
+type OrderCache interface {
+	Load(orders map[string]*types.OrderJSON)
+	Create(order *types.OrderJSON) error
+	Find(orderUID string) (*types.OrderJSON, error)
 }

@@ -1,25 +1,25 @@
 package main
 
 import (
-	cache2 "WB/cache"
-	"WB/storage"
-	"context"
-	"github.com/jackc/pgx/v5"
+	"WB/app"
+	"WB/cache/mapcache"
+	store2 "WB/store/psqlstore"
+	stream2 "WB/stream/nats"
 	"log"
 )
 
 func main() {
 
-	db, err := db()
+	store, err := store2.NewPostgresStore()
 	if err != nil {
 		log.Fatal(err)
 	}
-	store := storage.NewS(db)
-	cache, err := cache2.New(*store)
+
+	cache, err := mapcache.New(store)
 	if err != nil {
 		log.Fatal(err)
 	}
-	stream, err := NewNatsConnection(store, cache)
+	stream, err := stream2.NewNatsConnection(store, cache)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,17 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	server := NewAPIServer(":3000", store)
+	server := app.NewAPIServer(":3000", store, cache)
 	server.Run()
 
-}
-
-func db() (*pgx.Conn, error) {
-	connStr := "postgres://wb_user:wb_password@localhost:5434/wb_db"
-	conn, err := pgx.Connect(context.Background(), connStr)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close(context.Background())
-	return conn, nil
 }
